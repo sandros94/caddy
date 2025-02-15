@@ -1,0 +1,48 @@
+name: ssl-caddy-test
+
+services:
+  caddy:
+    image: sandros94/caddy-cache-l4:2.9.1.0
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '5432:5432'
+    environment:
+      - CADDY_INGRESS_NETWORKS=caddy
+      - CADDY_DOCKER_POLLING_INTERVAL=5s
+      - CADDY_DOCKER_SCAN_STOPPED_CONTAINERS=false
+    networks:
+      - caddy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - caddy_data:/data
+      - './.data:/data'
+    labels:
+      caddy.email: "user@example.com"
+
+  whoami:
+    image: traefik/whoami
+    networks:
+      - caddy
+    labels:
+      caddy: whoami.example.com
+      caddy.reverse_proxy: "{{upstreams 80}}"
+  
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    networks:
+      - caddy
+    environment:
+      POSTGRES_PASSWORD: postgres
+      PGSSLMOD: require
+      PGSSLNEGOTIATION: direct
+    labels:
+      caddy.layer4.:5432.@postgres: "tls sni db.example.com"
+      caddy.layer4.:5432.route: "@postgres"
+      caddy.layer4.:5432.route.proxy: "{{upstreams 5432}}"
+      caddy.layer4.:5432.route.tls.connection_policy.alpn: postgresql
+
+networks:
+  caddy:
